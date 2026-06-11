@@ -22,7 +22,10 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
+import time
 import urllib.parse
+import urllib.request
 
 import websockets
 
@@ -43,6 +46,31 @@ def read_loco_fsm_id(loco):
     except Exception:
         pass
     return None
+
+
+def _run(cmd, timeout=5):
+    """Run a command, return stripped stdout or '' on any failure."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except Exception:
+        return ""
+
+
+def gather_network():
+    """Reachable addresses to show in the portal. Tailscale is the SSH path that
+    works behind NAT; LAN/public are diagnostics. Blocking (the public-IP lookup
+    does HTTP), so the telemetry loop runs this off the event loop + caches it."""
+    ts = _run(["tailscale", "ip", "-4"])
+    tailscale_ip = ts.splitlines()[0] if ts else ""
+    route = _run(["ip", "route", "get", "1.1.1.1"]).split()
+    lan_ip = route[route.index("src") + 1] if "src" in route else ""
+    public_ip = ""
+    try:
+        with urllib.request.urlopen("http://api.ipify.org", timeout=5) as r:
+            public_ip = r.read().decode().strip()
+    except Exception:
+        pass
+    return {"tailscale_ip": tailscale_ip, "lan_ip": lan_ip, "public_ip": public_ip}
 
 
 def build_loco_dispatch(loco):
@@ -88,12 +116,21 @@ async def run(args):
         print(f"[agent] connected device={args.device} motion={'ON' if motion else 'OFF (safe)'}")
 
         async def telemetry():
+            loop = asyncio.get_running_loop()
+            net, last_net = {}, 0.0
             while True:
+                # Addresses change rarely; refresh off the event loop once a minute.
+                now = time.monotonic()
+                if not net or now - last_net >= 60:
+                    net = await loop.run_in_executor(None, gather_network)
+                    last_net = now
                 await ws.send(json.dumps({
                     "op": "publish", "topic": "/device_state",
                     "device_id": args.device, "device_type": "g1",
-                    # battery=None -> N/A (G1 SDK has no battery); status carries real loco FSM.
-                    "msg": {"battery": None, "status": {"fsm_id": read_loco_fsm_id(loco)}},
+                    # battery=None -> N/A (G1 SDK has no battery); status carries real loco
+                    # FSM + reachable addresses (tailscale/lan/public) for the portal.
+                    "msg": {"battery": None,
+                            "status": {"fsm_id": read_loco_fsm_id(loco), "network": net}},
                 }))
                 await asyncio.sleep(2)
 

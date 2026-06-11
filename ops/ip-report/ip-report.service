@@ -1,0 +1,10 @@
+[Unit]
+Description=Email the G1's reachable addresses when they change (driven by ip-report.timer)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ip-report.env
+# No --always: sends only when the Tailscale/LAN/public address changed since last run.
+ExecStart=/usr/bin/python3 /home/unitree/g1-robot-agent/ops/ip-report/report_ip.py

@@ -1,0 +1,15 @@
+[Unit]
+Description=Email the G1's reachable addresses on boot (remote-SSH enabler)
+# Wait for the network so we can fetch the public IP and reach Gmail.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ip-report.env
+# --always: unconditional send on every boot (the "boot email" the operator wants).
+ExecStart=/usr/bin/python3 /home/unitree/g1-robot-agent/ops/ip-report/report_ip.py --always
+# Runs as root so it can fix the clock (Jetson has no RTC battery) before TLS.
+
+[Install]
+WantedBy=multi-user.target

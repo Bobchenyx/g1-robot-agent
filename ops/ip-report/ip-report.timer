@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodically check the G1's address and email on change
+
+[Timer]
+# First check 2 min after boot (the boot email already fired from ip-report-boot.service),
+# then every 30 min to catch public-IP drift or Tailscale re-auth.
+OnBootSec=2min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=ip-report.service
+
+[Install]
+WantedBy=timers.target

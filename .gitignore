@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Secrets / keys
+*.pem
+export_keys/
+ip-report.env
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
